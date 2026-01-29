@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "ServiceCims": {
+      "commandName": "Project",
+      "nativeDebugging": true
+    }
+  }
+}

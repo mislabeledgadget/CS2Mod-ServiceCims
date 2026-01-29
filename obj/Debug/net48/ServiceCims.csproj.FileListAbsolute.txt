@@ -1,0 +1,9 @@
+C:\Users\wscot\source\repos\ServiceCims\bin\Debug\net48\ServiceCims.dll
+C:\Users\wscot\source\repos\ServiceCims\bin\Debug\net48\ServiceCims.pdb
+C:\Users\wscot\source\repos\ServiceCims\obj\Debug\net48\ServiceCims.csproj.AssemblyReference.cache
+C:\Users\wscot\source\repos\ServiceCims\obj\Debug\net48\ServiceCims.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\wscot\source\repos\ServiceCims\obj\Debug\net48\ServiceCims.AssemblyInfoInputs.cache
+C:\Users\wscot\source\repos\ServiceCims\obj\Debug\net48\ServiceCims.AssemblyInfo.cs
+C:\Users\wscot\source\repos\ServiceCims\obj\Debug\net48\ServiceCims.csproj.CoreCompileInputs.cache
+C:\Users\wscot\source\repos\ServiceCims\obj\Debug\net48\ServiceCims.dll
+C:\Users\wscot\source\repos\ServiceCims\obj\Debug\net48\ServiceCims.pdb
