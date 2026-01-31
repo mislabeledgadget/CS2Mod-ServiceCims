@@ -1,4 +1,3 @@
 <Solution>
-  <Project Path="../Game.dll/Game.csproj" />
   <Project Path="ServiceCims.csproj" />
 </Solution>
