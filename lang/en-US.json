@@ -1,0 +1,20 @@
+{
+  "Options.SECTION[ServiceCims.ServiceCims.Mod]": "Park Volunteers",
+
+  "Options.SECTION[ServiceCims.ServiceCims.Mod.Dispatch]": "Dispatch Settings",
+  "Options.SECTION[ServiceCims.ServiceCims.Mod.Thresholds]": "Threshold Settings",
+
+  "Options.OPTION[ServiceCims.ServiceCims.Mod.ModSettings.DispatchIntervalMinutes]": "Dispatch Interval (minutes)",
+  "Options.OPTION_DESCRIPTION[ServiceCims.ServiceCims.Mod.ModSettings.DispatchIntervalMinutes]": "How often to check for parks needing volunteers.",
+
+  "Options.OPTION[ServiceCims.ServiceCims.Mod.ModSettings.MaxVolunteersPerDispatch]": "Max Volunteers Per Dispatch",
+  "Options.OPTION_DESCRIPTION[ServiceCims.ServiceCims.Mod.ModSettings.MaxVolunteersPerDispatch]": "Maximum number of volunteers to send per dispatch cycle.",
+
+  "Options.OPTION[ServiceCims.ServiceCims.Mod.ModSettings.MinFailureCount]": "Min Failure Count",
+  "Options.OPTION_DESCRIPTION[ServiceCims.ServiceCims.Mod.ModSettings.MinFailureCount]": "Number of failed maintenance attempts before sending volunteers.",
+
+  "Options.OPTION[ServiceCims.ServiceCims.Mod.ModSettings.MaintenanceThresholdPercent]": "Maintenance Threshold (%)",
+  "Options.OPTION_DESCRIPTION[ServiceCims.ServiceCims.Mod.ModSettings.MaintenanceThresholdPercent]": "Park maintenance level below which volunteers will be sent.",
+
+  "SelectedInfoPanel.CITIZEN_STATE[Volunteering]": "Volunteering"
+}
