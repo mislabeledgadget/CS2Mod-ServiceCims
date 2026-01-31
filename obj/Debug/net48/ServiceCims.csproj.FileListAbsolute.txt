@@ -7,3 +7,5 @@ C:\Users\wscot\source\repos\ServiceCims\obj\Debug\net48\ServiceCims.AssemblyInfo
 C:\Users\wscot\source\repos\ServiceCims\obj\Debug\net48\ServiceCims.csproj.CoreCompileInputs.cache
 C:\Users\wscot\source\repos\ServiceCims\obj\Debug\net48\ServiceCims.dll
 C:\Users\wscot\source\repos\ServiceCims\obj\Debug\net48\ServiceCims.pdb
+C:\Users\wscot\source\repos\ServiceCims\obj\Debug\net48\ServiceCims.sourcelink.json
+C:\Users\wscot\source\repos\ServiceCims\bin\Debug\net48\lang\en-US.json
