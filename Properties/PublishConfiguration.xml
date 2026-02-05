@@ -1,6 +1,6 @@
 ﻿<Publish>
 	<!--Id must be set in order to update existed mod. it is not required for publishing mod for the first time-->
-	<ModId Value="" />
+	<ModId Value="133261" />
 	<!--Name of the mod to display to players-->
 	<DisplayName Value="Service Cims - Park Volunteers" />
 	<!--Short description of the mod-->
@@ -10,24 +10,24 @@
 	<LongDescription>
 # Service Cims - Park Volunteers (for now)
 
-Version 1.0.0 of this module is focused solely on the Parks Department. The purpose of this mod is to maintain parks that can't be reached by Parks Department vehicles, either because they exist on remote islands and can only be access via ferry, or because they only are accessible via pedestrian paths. This module will recruit unemployed, teen/adult students, retirees, and criminals to become park volunteers for the day and restore maintenance at parks and clean up it's trash. They will take whatever means of transportation available to them to reach the park.
+Version 1.0 of this module is focused solely on the Parks Department. The purpose of this mod is to maintain parks that can't be reached by Parks Department vehicles, either because they exist on remote islands and can only be access via ferry, or because they only are accessible via pedestrian paths. This module will recruit unemployed, teen/adult students, retirees, and criminals to become park volunteers for the day and restore maintenance at parks and clean up it's trash. They will take whatever means of transportation available to them to reach the park.
 
 The Parks Department will announce the volunteer for the day, and the park volunteer will also announce via Chirper, allowing you to click on both the cim and the park. (Thanks to @ruzbeh0. for their awesome CustomChirps module and API).
 
 The cim will show VOLUNTEERING AT {name of park} on his cim info window.
 
-## **A few different variables are adjustable via settings:**
+## Settings:**
 1. Dispatch Interval in minutes - how often we check for parks that need maintaining. (1-60 minutes)
-2. Max volunteers per dispatch - up to how many cims (1 per park) we will send out to restore a parks maintenance and clean up it's trash. (1-50)
-3. Min Failure Count - how many failures the park must have before it's considered a qualifying park. Parks with a lot of failures most likely aren't being reached by Park Maintenance vehicles. (2-50)
+2. Max volunteers per dispatch - up to how many cims (1 per park) we will send out to restore a park's maintenance and clean up it's trash. (1-50)
+3. Min Failure Count - how many failures the park must have before it's considered a qualifying park. Parks with a lot of failures most likely aren't being reached by Park Maintenance vehicles. (3-50)
 4. Maintenance Threshold (%) - What the park maintenance level must be under to qualify for a park volunteer. (0-70%)
 
 ## **Technical notes:**
-1. Filters out cims that have jobs, are sleeping, sick, or dead.
-2. Returns 10 qualifying cims for each park, and picks the closest one.
+1. Filters out cims that have jobs, sleeping, sick, dead, or sending out mail.
+2. Queries 10 qualifying cims for each park, and picks the closest one.
 3. This park also maintains a list of current park volunteers and parks with park volunteers enroute so that they don't get picked again.
-4. Watches for cims that fail their route (usually because of route cost exceeding tolerable)
-5. Clears park and cim from list once it's been maintained.
+4. Watches for cims that fail their route (usually because of route cost exceeding what's tolerable)
+5. Clears park and cim from list once it's been maintained and sends the cim home.
   </LongDescription>
 	<!--Thumbnail-->
 	<Thumbnail Value="Properties/Thumbnail.png" />
@@ -40,7 +40,7 @@ The cim will show VOLUNTEERING AT {name of park} on his cim info window.
 	<!--Tag, can be set multiple times-->
 	<Tag Value="Code Mod" />
 	<!--Version of the mod-->
-	<ModVersion Value="1.0.0" />
+	<ModVersion Value="1.0.2" />
 	<!--Recommended version of the base game to use the mod-->
 	<GameVersion Value="1.5.*" />
 	<!--Dependency for the mod, can be set multiple times-->
@@ -48,11 +48,12 @@ The cim will show VOLUNTEERING AT {name of park} on his cim info window.
 	<Dependency Id="121812" DisplayName="Custom Chirps" />
 	<ForumLink Value="https://forum.paradoxplaza.com/forum/threads/service-cims.1898234/"/>
 	<!--Change log for new version. Single line or multi line. Supports minimal markdown subset-->
-	<ChangeLog Value="- Initial Release" />
+	<ChangeLog Value="- Filter out cims headed to the post office. Send cims home after they clean the park so they don't loiter indefinately." />
 	<!--<ChangeLog>
 	</ChangeLog>-->
 	<!--External link, can be set multiple times. supported types are "discord", "github", "youtube", "twitch", "x", "paypal", "patreon", "buymeacoffee", "kofi", "crowdin", "gitlab", "gofundme"-->
 	<ExternalLink Type="github" Url="https://github.com/mislabeledgadget/CS2Mod-ServiceCims" />
+  <ExternalLink Type="discord" Url="https://discord.com/channels/1024242828114673724/1219579814055514112/threads/1467007571024941267" />
 	<!--Supported values Public, Private, Unlisted-->
 	<AccessLevel Value="Public" />
 </Publish>
