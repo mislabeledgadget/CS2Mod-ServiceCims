@@ -38,6 +38,7 @@ namespace ServiceCims.Bridge
         private static bool s_Available;
         private static Type s_ApiType;
         private static MethodInfo s_PostChirpMethod;
+        private static MethodInfo s_PostChirpFromEntityMethod;
         private static Type s_DepartmentEnumType;
 
         /// <summary>
@@ -80,6 +81,39 @@ namespace ServiceCims.Bridge
             }
         }
 
+        /// <summary>
+        /// Post a chirp from a specific entity (e.g., a Citizen).
+        /// The sender entity will be clickable in the chirp UI.
+        /// Falls back to PostChirp with the specified department if PostChirpFromEntity is not available.
+        /// </summary>
+        /// <param name="text">The chirp message text. Use {LINK_1} for target entity link.</param>
+        /// <param name="senderEntity">The entity to show as sender (clickable).</param>
+        /// <param name="targetEntity">Target entity for {LINK_1} in the message.</param>
+        /// <param name="customSenderName">Display name for the sender.</param>
+        /// <param name="fallbackDepartment">Department to use if PostChirpFromEntity is not available.</param>
+        public static void PostChirpFromEntity(string text, Entity senderEntity, Entity targetEntity, string customSenderName = null, DepartmentAccountBridge fallbackDepartment = DepartmentAccountBridge.ParkAndRec)
+        {
+            if (!IsAvailable)
+                return;
+
+            if (s_PostChirpFromEntityMethod == null)
+            {
+                // Fall back to regular PostChirp with the fallback department
+                Mod.log.Info("[CustomChirpsBridge] PostChirpFromEntity not available, falling back to PostChirp");
+                PostChirp(text, fallbackDepartment, targetEntity, customSenderName);
+                return;
+            }
+
+            try
+            {
+                s_PostChirpFromEntityMethod.Invoke(null, new object[] { text, senderEntity, targetEntity, customSenderName });
+            }
+            catch (Exception ex)
+            {
+                Mod.log.Error($"[CustomChirpsBridge] PostChirpFromEntity failed: {ex.Message}");
+            }
+        }
+
         private static void EnsureResolved()
         {
             if (s_Resolved)
@@ -112,6 +146,13 @@ namespace ServiceCims.Bridge
                 {
                     Mod.log.Warn("[CustomChirpsBridge] DepartmentAccount enum not found");
                     return;
+                }
+
+                // Find PostChirpFromEntity method (optional - may not exist in older versions)
+                s_PostChirpFromEntityMethod = s_ApiType.GetMethod("PostChirpFromEntity", BindingFlags.Public | BindingFlags.Static);
+                if (s_PostChirpFromEntityMethod != null)
+                {
+                    Mod.log.Info("[CustomChirpsBridge] PostChirpFromEntity method available");
                 }
 
                 s_Available = true;

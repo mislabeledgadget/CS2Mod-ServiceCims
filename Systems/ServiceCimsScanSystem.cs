@@ -54,6 +54,8 @@ namespace ServiceCims.Systems
 
         // --- Timing State ---
         private double m_LastDispatchTime;
+        private double m_LastMonitorTime;
+        private const double MonitorIntervalSeconds = 60.0; // Check volunteers every minute
 
         // --- Chirp Helper ---
         private VolunteerChirpHelper m_ChirpHelper;
@@ -75,7 +77,7 @@ namespace ServiceCims.Systems
             // Build candidate citizen query (exclude existing volunteers)
             m_CandidateCimQuery = new EntityQueryBuilder(Allocator.Temp)
                 .WithAll<Citizen, CurrentBuilding, HouseholdMember>()
-                .WithNone<Worker, HealthProblem, AttendingMeeting, Deleted, ParkVolunteer>()
+                .WithNone<Worker, HealthProblem, AttendingMeeting, MailSender, Deleted, ParkVolunteer>()
                 .Build(this);
 
             // Build needy park query
@@ -99,6 +101,7 @@ namespace ServiceCims.Systems
             __TypeHandle = new TypeHandle(ref CheckedStateRef);
 
             m_LastDispatchTime = 0;
+            m_LastMonitorTime = 0;
 
             // Initialize chirp helper
             m_ChirpHelper = new VolunteerChirpHelper(World);
@@ -127,11 +130,13 @@ namespace ServiceCims.Systems
             // Update type handles every frame
             __TypeHandle.Update(ref CheckedStateRef);
 
-            // Always run monitor job to check for arrivals
-            RunMonitorJob();
-
-            // Process any completions from previous frame
-            ProcessCompletions();
+            // Run monitor job to check for arrivals/abandonments (every minute)
+            if (now - m_LastMonitorTime >= MonitorIntervalSeconds)
+            {
+                m_LastMonitorTime = now;
+                RunMonitorJob();
+                ProcessCompletions();
+            }
 
             // Check dispatch interval
             double intervalSeconds = settings.DispatchIntervalMinutes * 60.0;
@@ -211,6 +216,8 @@ namespace ServiceCims.Systems
                 CurrentBuildingType = __TypeHandle.CurrentBuildingType,
                 TravelPurposeType = __TypeHandle.TravelPurposeType,
                 WorkerLookup = __TypeHandle.WorkerLookup,
+                HouseholdMemberLookup = __TypeHandle.HouseholdMemberLookup,
+                PropertyRenterLookup = __TypeHandle.PropertyRenterLookup,
                 Completions = m_Completions.AsParallelWriter()
             };
 
@@ -304,6 +311,7 @@ namespace ServiceCims.Systems
                         m_TargetPark = park.Park,
                         m_ServiceRequest = park.ServiceRequest
                     });
+                    Mod.log.Info($"[Volunteer] Added ParkVolunteer component to citizen {bestCandidate.Citizen.Index}:{bestCandidate.Citizen.Version} (target park: {park.Park.Index}:{park.Park.Version})");
                 }
                 else
                 {
@@ -312,6 +320,7 @@ namespace ServiceCims.Systems
                         m_TargetPark = park.Park,
                         m_ServiceRequest = park.ServiceRequest
                     });
+                    Mod.log.Info($"[Volunteer] Updated ParkVolunteer component on citizen {bestCandidate.Citizen.Index}:{bestCandidate.Citizen.Version} (target park: {park.Park.Index}:{park.Park.Version})");
                 }
 
                 deployed++;
@@ -362,41 +371,77 @@ namespace ServiceCims.Systems
             while (m_Completions.TryDequeue(out var completion))
             {
                 if (!EntityManager.Exists(completion.Volunteer))
+                {
+                    Mod.log.Info($"[Volunteer] Citizen {completion.Volunteer.Index}:{completion.Volunteer.Version} no longer exists, removing from tracking");
                     continue;
+                }
 
-                // Remove volunteer component first (applies to both success and failure)
+                // Remove volunteer component (applies to both success and failure, but NOT traveling)
                 if (EntityManager.HasComponent<ParkVolunteer>(completion.Volunteer))
                 {
                     EntityManager.RemoveComponent<ParkVolunteer>(completion.Volunteer);
+                    Mod.log.Info($"[Volunteer] Removed ParkVolunteer component from citizen {completion.Volunteer.Index}:{completion.Volunteer.Version}");
                 }
 
                 if (completion.Failed)
                 {
                     // Volunteer abandoned trip - just clean up, don't restore maintenance
                     failed++;
-                    Mod.log.Info($"[Volunteer] Citizen {completion.Volunteer.Index}:{completion.Volunteer.Version} abandoned trip to park {completion.Park.Index}:{completion.Park.Version}");
+                    string reasonText = completion.Reason switch
+                    {
+                        AbandonReason.GotJob => "got a job",
+                        AbandonReason.PurposeChanged => $"changed travel purpose to {completion.ActualPurpose}",
+                        AbandonReason.ReturnedHome => $"returned home (purpose={completion.ActualPurpose})",
+                        _ => "unknown reason"
+                    };
+                    string locationText = completion.CurrentBuilding != Entity.Null
+                        ? $", currentBuilding={completion.CurrentBuilding.Index}:{completion.CurrentBuilding.Version}"
+                        : ", no currentBuilding";
+                    Mod.log.Info($"[Volunteer] Citizen {completion.Volunteer.Index}:{completion.Volunteer.Version} abandoned trip to park {completion.Park.Index}:{completion.Park.Version} (reason: {reasonText}{locationText})");
                     continue;
                 }
 
                 // Volunteer arrived successfully - restore park maintenance
+                Mod.log.Info($"[Volunteer] Citizen {completion.Volunteer.Index}:{completion.Volunteer.Version} arrived at park {completion.Park.Index}:{completion.Park.Version}");
+
+                // Remove GoingToWork TravelPurpose - we KNOW it was to our park since they arrived
+                // Only remove on success; for abandonment, it might be their actual job commute
+                if (EntityManager.HasComponent<TravelPurpose>(completion.Volunteer))
+                {
+                    var travelPurpose = EntityManager.GetComponentData<TravelPurpose>(completion.Volunteer);
+                    if (travelPurpose.m_Purpose == Purpose.GoingToWork)
+                    {
+                        EntityManager.RemoveComponent<TravelPurpose>(completion.Volunteer);
+                        Mod.log.Info($"[Volunteer] Removed GoingToWork TravelPurpose from citizen {completion.Volunteer.Index}:{completion.Volunteer.Version}");
+                    }
+                }
+
                 RestoreParkMaintenance(completion.Park);
 
                 // Complete service request via HandleRequest
                 if (completion.ServiceRequest != Entity.Null && EntityManager.Exists(completion.ServiceRequest))
                 {
                     CompleteServiceRequest(completion.ServiceRequest, completion.Volunteer);
+                    Mod.log.Info($"[Volunteer] Completed service request {completion.ServiceRequest.Index}:{completion.ServiceRequest.Version} for park {completion.Park.Index}:{completion.Park.Version}");
                 }
 
                 // Clean up garbage
                 CleanupParkGarbage(completion.Park, completion.Volunteer);
 
+                // Send the volunteer home so they don't get stuck at the park
+                SendVolunteerHome(completion.Volunteer);
+                Mod.log.Info($"[Volunteer] Sent citizen {completion.Volunteer.Index}:{completion.Volunteer.Version} home after completing volunteer work");
+
                 completed++;
-                Mod.log.Info($"[Volunteer] Citizen {completion.Volunteer.Index}:{completion.Volunteer.Version} arrived at park {completion.Park.Index}:{completion.Park.Version}, maintenance restored");
             }
 
             if (completed > 0)
             {
-                Mod.log.Info($"Completed {completed} volunteer arrivals, maintenance restored");
+                Mod.log.Info($"[Summary] Completed {completed} volunteer arrivals, maintenance restored");
+            }
+            if (failed > 0)
+            {
+                Mod.log.Info($"[Summary] {failed} volunteers abandoned their trips");
             }
         }
 
@@ -459,6 +504,47 @@ namespace ServiceCims.Systems
             {
                 CompleteServiceRequest(gp.m_CollectionRequest, volunteer);
             }
+        }
+
+        private void SendVolunteerHome(Entity volunteer)
+        {
+            if (volunteer == Entity.Null || !EntityManager.Exists(volunteer))
+                return;
+
+            // Get the citizen's household
+            if (!EntityManager.HasComponent<HouseholdMember>(volunteer))
+                return;
+
+            var householdMember = EntityManager.GetComponentData<HouseholdMember>(volunteer);
+            var household = householdMember.m_Household;
+
+            if (household == Entity.Null || !EntityManager.Exists(household))
+                return;
+
+            // Get the household's home property
+            if (!EntityManager.HasComponent<PropertyRenter>(household))
+                return;
+
+            var propertyRenter = EntityManager.GetComponentData<PropertyRenter>(household);
+            var home = propertyRenter.m_Property;
+
+            if (home == Entity.Null || !EntityManager.Exists(home))
+                return;
+
+            // Add a trip home
+            if (!EntityManager.HasBuffer<TripNeeded>(volunteer))
+                return;
+
+            var tripBuffer = EntityManager.GetBuffer<TripNeeded>(volunteer);
+            tripBuffer.Add(new TripNeeded
+            {
+                m_TargetAgent = home,
+                m_Purpose = Purpose.GoingHome,
+                m_Data = 0,
+                m_Resource = Game.Economy.Resource.NoResource
+            });
+
+            // Note: TravelPurpose removal is handled in ProcessCompletions before this is called
         }
     }
 }

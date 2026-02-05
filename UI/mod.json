@@ -1,7 +1,7 @@
 {
   "id": "ServiceCims",
-  "author": "wscot",
-  "version": "1.0.0",
+  "author": "MislabeledGadget",
+  "version": "1.0.2",
   "assemblies": [
     "ServiceCims.dll"
   ],

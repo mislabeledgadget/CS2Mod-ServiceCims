@@ -35,6 +35,19 @@ namespace ServiceCims.Systems
             public Entity Park;
             public Entity ServiceRequest;
             public bool Failed;  // True if volunteer abandoned trip, false if arrived successfully
+            public AbandonReason Reason;
+            public Purpose ActualPurpose;  // For debugging PurposeChanged
+            public Entity CurrentBuilding; // For debugging - where they are now
+        }
+
+        private enum AbandonReason : byte
+        {
+            None = 0,
+            Arrived = 1,
+            GotJob = 2,
+            PurposeChanged = 3,
+            ReturnedHome = 4,
+            Traveling = 5  // Not abandoned - still en route (no CurrentBuilding, still GoingToWork)
         }
 
         // --- TypeHandle struct for cached component handles ---
@@ -62,6 +75,8 @@ namespace ServiceCims.Systems
             [ReadOnly] public ComponentLookup<CurrentTransport> CurrentTransportLookup;
             [ReadOnly] public ComponentLookup<ServiceRequest> ServiceRequestLookup;
             [ReadOnly] public ComponentLookup<Worker> WorkerLookup;
+            [ReadOnly] public ComponentLookup<HouseholdMember> HouseholdMemberLookup;
+            [ReadOnly] public ComponentLookup<PropertyRenter> PropertyRenterLookup;
 
             public TypeHandle(ref SystemState state)
             {
@@ -81,6 +96,8 @@ namespace ServiceCims.Systems
                 CurrentTransportLookup = state.GetComponentLookup<CurrentTransport>(true);
                 ServiceRequestLookup = state.GetComponentLookup<ServiceRequest>(true);
                 WorkerLookup = state.GetComponentLookup<Worker>(true);
+                HouseholdMemberLookup = state.GetComponentLookup<HouseholdMember>(true);
+                PropertyRenterLookup = state.GetComponentLookup<PropertyRenter>(true);
             }
 
             public void Update(ref SystemState state)
@@ -101,6 +118,8 @@ namespace ServiceCims.Systems
                 CurrentTransportLookup.Update(ref state);
                 ServiceRequestLookup.Update(ref state);
                 WorkerLookup.Update(ref state);
+                HouseholdMemberLookup.Update(ref state);
+                PropertyRenterLookup.Update(ref state);
             }
         }
 
@@ -250,6 +269,8 @@ namespace ServiceCims.Systems
             [ReadOnly] public ComponentTypeHandle<TravelPurpose> TravelPurposeType;
 
             [ReadOnly] public ComponentLookup<Worker> WorkerLookup;
+            [ReadOnly] public ComponentLookup<HouseholdMember> HouseholdMemberLookup;
+            [ReadOnly] public ComponentLookup<PropertyRenter> PropertyRenterLookup;
 
             public NativeQueue<VolunteerCompletion>.ParallelWriter Completions;
 
@@ -276,27 +297,41 @@ namespace ServiceCims.Systems
                     var entity = entities[i];
                     var volunteer = volunteers[i];
 
-                    // Check if volunteer has arrived at the target park
+                    // Get current state
+                    Entity currentBuilding = Entity.Null;
                     if (hasCurrentBuilding)
                     {
-                        var currentBuilding = currentBuildings[i].m_CurrentBuilding;
-                        if (currentBuilding == volunteer.m_TargetPark)
-                        {
-                            // Volunteer has arrived - queue for completion processing
-                            Completions.Enqueue(new VolunteerCompletion
-                            {
-                                Volunteer = entity,
-                                Park = volunteer.m_TargetPark,
-                                ServiceRequest = volunteer.m_ServiceRequest,
-                                Failed = false
-                            });
-                            continue;
-                        }
+                        currentBuilding = currentBuildings[i].m_CurrentBuilding;
                     }
 
-                    // Check if volunteer got a job while en route - they're now going to
-                    // their actual workplace, not our park. We only dispatch non-workers,
-                    // so gaining a Worker component means they abandoned our trip.
+                    Purpose currentPurpose = Purpose.None;
+                    if (hasTravelPurpose)
+                    {
+                        currentPurpose = travelPurposes[i].m_Purpose;
+                    }
+
+                    Entity home = GetCitizenHome(entity);
+                    bool isAtHome = (currentBuilding != Entity.Null && currentBuilding == home);
+                    bool isTraveling = (currentBuilding == Entity.Null);
+                    bool isAtPark = (currentBuilding == volunteer.m_TargetPark);
+
+                    // Check if volunteer has arrived at the target park
+                    if (isAtPark)
+                    {
+                        Completions.Enqueue(new VolunteerCompletion
+                        {
+                            Volunteer = entity,
+                            Park = volunteer.m_TargetPark,
+                            ServiceRequest = volunteer.m_ServiceRequest,
+                            Failed = false,
+                            Reason = AbandonReason.Arrived,
+                            ActualPurpose = currentPurpose,
+                            CurrentBuilding = currentBuilding
+                        });
+                        continue;
+                    }
+
+                    // Check if volunteer got a job while en route
                     if (WorkerLookup.HasComponent(entity))
                     {
                         Completions.Enqueue(new VolunteerCompletion
@@ -304,29 +339,76 @@ namespace ServiceCims.Systems
                             Volunteer = entity,
                             Park = volunteer.m_TargetPark,
                             ServiceRequest = volunteer.m_ServiceRequest,
-                            Failed = true
+                            Failed = true,
+                            Reason = AbandonReason.GotJob,
+                            ActualPurpose = currentPurpose,
+                            CurrentBuilding = currentBuilding
                         });
                         continue;
                     }
 
-                    // Check if volunteer has abandoned the trip by changing their travel purpose
-                    // We dispatch with Purpose.GoingToWork, so if it changed to something else
-                    // (GoingHome, Sleeping, Shopping, etc.), they've abandoned
-                    if (hasTravelPurpose)
+                    // If they're traveling (no CurrentBuilding), they're still en route
+                    // Don't check TravelPurpose yet - it might be transitioning
+                    if (isTraveling)
                     {
-                        var purpose = travelPurposes[i].m_Purpose;
-                        if (purpose != Purpose.GoingToWork)
+                        // Still traveling - nothing to do, wait for them to arrive somewhere
+                        continue;
+                    }
+
+                    // If they're at home, check if they've changed purpose
+                    // (might still be leaving, or might have given up)
+                    if (isAtHome)
+                    {
+                        // Only mark as abandoned if purpose clearly changed to something else
+                        // GoingToWork = still planning to go, None = might be transitioning
+                        if (hasTravelPurpose && currentPurpose != Purpose.GoingToWork && currentPurpose != Purpose.None)
                         {
                             Completions.Enqueue(new VolunteerCompletion
                             {
                                 Volunteer = entity,
                                 Park = volunteer.m_TargetPark,
                                 ServiceRequest = volunteer.m_ServiceRequest,
-                                Failed = true
+                                Failed = true,
+                                Reason = AbandonReason.ReturnedHome,
+                                ActualPurpose = currentPurpose,
+                                CurrentBuilding = currentBuilding
                             });
                         }
+                        // If still GoingToWork or None, they might still be leaving - wait
+                        continue;
+                    }
+
+                    // They're somewhere else (not home, not park, not traveling)
+                    // This is unusual - log it for debugging
+                    if (hasTravelPurpose && currentPurpose != Purpose.GoingToWork)
+                    {
+                        Completions.Enqueue(new VolunteerCompletion
+                        {
+                            Volunteer = entity,
+                            Park = volunteer.m_TargetPark,
+                            ServiceRequest = volunteer.m_ServiceRequest,
+                            Failed = true,
+                            Reason = AbandonReason.PurposeChanged,
+                            ActualPurpose = currentPurpose,
+                            CurrentBuilding = currentBuilding
+                        });
                     }
                 }
+            }
+
+            private Entity GetCitizenHome(Entity citizen)
+            {
+                if (!HouseholdMemberLookup.HasComponent(citizen))
+                    return Entity.Null;
+
+                var household = HouseholdMemberLookup[citizen].m_Household;
+                if (household == Entity.Null)
+                    return Entity.Null;
+
+                if (!PropertyRenterLookup.HasComponent(household))
+                    return Entity.Null;
+
+                return PropertyRenterLookup[household].m_Property;
             }
         }
     }
