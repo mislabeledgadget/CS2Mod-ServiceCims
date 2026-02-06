@@ -47,7 +47,8 @@ namespace ServiceCims.Systems
             GotJob = 2,
             PurposeChanged = 3,
             ReturnedHome = 4,
-            Traveling = 5  // Not abandoned - still en route (no CurrentBuilding, still GoingToWork)
+            Traveling = 5,  // Not abandoned - still en route (no CurrentBuilding, still GoingToWork)
+            StuckInBuilding = 6  // Hasn't left their starting building after 60 seconds
         }
 
         // --- TypeHandle struct for cached component handles ---
@@ -347,20 +348,35 @@ namespace ServiceCims.Systems
                         continue;
                     }
 
+                    // Check if they're still at the same building they were at when dispatched
+                    // If so, they haven't left after 60 seconds - treat as abandoned
+                    if (currentBuilding != Entity.Null &&
+                        volunteer.m_StartingBuilding != Entity.Null &&
+                        currentBuilding == volunteer.m_StartingBuilding)
+                    {
+                        Completions.Enqueue(new VolunteerCompletion
+                        {
+                            Volunteer = entity,
+                            Park = volunteer.m_TargetPark,
+                            ServiceRequest = volunteer.m_ServiceRequest,
+                            Failed = true,
+                            Reason = AbandonReason.StuckInBuilding,
+                            ActualPurpose = currentPurpose,
+                            CurrentBuilding = currentBuilding
+                        });
+                        continue;
+                    }
+
                     // If they're traveling (no CurrentBuilding), they're still en route
-                    // Don't check TravelPurpose yet - it might be transitioning
                     if (isTraveling)
                     {
-                        // Still traveling - nothing to do, wait for them to arrive somewhere
                         continue;
                     }
 
                     // If they're at home, check if they've changed purpose
-                    // (might still be leaving, or might have given up)
                     if (isAtHome)
                     {
                         // Only mark as abandoned if purpose clearly changed to something else
-                        // GoingToWork = still planning to go, None = might be transitioning
                         if (hasTravelPurpose && currentPurpose != Purpose.GoingToWork && currentPurpose != Purpose.None)
                         {
                             Completions.Enqueue(new VolunteerCompletion
@@ -374,12 +390,11 @@ namespace ServiceCims.Systems
                                 CurrentBuilding = currentBuilding
                             });
                         }
-                        // If still GoingToWork or None, they might still be leaving - wait
                         continue;
                     }
 
                     // They're somewhere else (not home, not park, not traveling)
-                    // This is unusual - log it for debugging
+                    // Check if their purpose changed
                     if (hasTravelPurpose && currentPurpose != Purpose.GoingToWork)
                     {
                         Completions.Enqueue(new VolunteerCompletion

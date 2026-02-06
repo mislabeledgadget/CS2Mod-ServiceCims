@@ -45,10 +45,10 @@ The cim will show VOLUNTEERING AT {name of park} on his cim info window.
 	<GameVersion Value="1.5.*" />
 	<!--Dependency for the mod, can be set multiple times-->
 	<Dependency Id="75426" DisplayName="I18n Everywhere" Version="1.4.*" />
-	<Dependency Id="121812" DisplayName="Custom Chirps" />
+	<Dependency Id="121812" DisplayName="Custom Chirps" Version="0.4" />
 	<ForumLink Value="https://forum.paradoxplaza.com/forum/threads/service-cims.1898234/"/>
 	<!--Change log for new version. Single line or multi line. Supports minimal markdown subset-->
-	<ChangeLog Value="- Filter out cims headed to the post office. Send cims home after they clean the park so they don't loiter indefinately." />
+	<ChangeLog Value="- A single chirp is now sent out for each volunteer, with their name being clickable. More checks on cims abandoning trips to ensure parks get put back into the queue if the last volunteer abandoned their trip." />
 	<!--<ChangeLog>
 	</ChangeLog>-->
 	<!--External link, can be set multiple times. supported types are "discord", "github", "youtube", "twitch", "x", "paypal", "patreon", "buymeacoffee", "kofi", "crowdin", "gitlab", "gofundme"-->
