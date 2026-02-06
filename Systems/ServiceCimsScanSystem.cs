@@ -22,6 +22,7 @@ namespace ServiceCims.Systems
     {
         public Entity m_TargetPark;
         public Entity m_ServiceRequest;
+        public Entity m_StartingBuilding;  // Building they were at when dispatched, for stuck detection
     }
 
     /// <summary>
@@ -303,25 +304,37 @@ namespace ServiceCims.Systems
                     m_Resource = Game.Economy.Resource.NoResource
                 });
 
+                // Get the citizen's current building to track for stuck detection
+                Entity currentBuilding = Entity.Null;
+                if (EntityManager.HasComponent<CurrentBuilding>(bestCandidate.Citizen))
+                {
+                    currentBuilding = EntityManager.GetComponentData<CurrentBuilding>(bestCandidate.Citizen).m_CurrentBuilding;
+                }
+
                 // Mark citizen as park volunteer
                 if (!EntityManager.HasComponent<ParkVolunteer>(bestCandidate.Citizen))
                 {
                     EntityManager.AddComponentData(bestCandidate.Citizen, new ParkVolunteer
                     {
                         m_TargetPark = park.Park,
-                        m_ServiceRequest = park.ServiceRequest
+                        m_ServiceRequest = park.ServiceRequest,
+                        m_StartingBuilding = currentBuilding
                     });
-                    Mod.log.Info($"[Volunteer] Added ParkVolunteer component to citizen {bestCandidate.Citizen.Index}:{bestCandidate.Citizen.Version} (target park: {park.Park.Index}:{park.Park.Version})");
                 }
                 else
                 {
                     EntityManager.SetComponentData(bestCandidate.Citizen, new ParkVolunteer
                     {
                         m_TargetPark = park.Park,
-                        m_ServiceRequest = park.ServiceRequest
+                        m_ServiceRequest = park.ServiceRequest,
+                        m_StartingBuilding = currentBuilding
                     });
-                    Mod.log.Info($"[Volunteer] Updated ParkVolunteer component on citizen {bestCandidate.Citizen.Index}:{bestCandidate.Citizen.Version} (target park: {park.Park.Index}:{park.Park.Version})");
                 }
+
+                string buildingText = currentBuilding != Entity.Null
+                    ? $"{currentBuilding.Index}:{currentBuilding.Version}"
+                    : "none";
+                Mod.log.Info($"[Volunteer] Dispatched citizen {bestCandidate.Citizen.Index}:{bestCandidate.Citizen.Version} to park {park.Park.Index}:{park.Park.Version} (currentBuilding: {buildingText})");
 
                 deployed++;
 
@@ -376,7 +389,7 @@ namespace ServiceCims.Systems
                     continue;
                 }
 
-                // Remove volunteer component (applies to both success and failure, but NOT traveling)
+                // Remove volunteer component (applies to both success and failure)
                 if (EntityManager.HasComponent<ParkVolunteer>(completion.Volunteer))
                 {
                     EntityManager.RemoveComponent<ParkVolunteer>(completion.Volunteer);
@@ -392,12 +405,19 @@ namespace ServiceCims.Systems
                         AbandonReason.GotJob => "got a job",
                         AbandonReason.PurposeChanged => $"changed travel purpose to {completion.ActualPurpose}",
                         AbandonReason.ReturnedHome => $"returned home (purpose={completion.ActualPurpose})",
+                        AbandonReason.StuckInBuilding => $"stuck in building {completion.CurrentBuilding.Index}:{completion.CurrentBuilding.Version} for 60+ seconds",
                         _ => "unknown reason"
                     };
                     string locationText = completion.CurrentBuilding != Entity.Null
                         ? $", currentBuilding={completion.CurrentBuilding.Index}:{completion.CurrentBuilding.Version}"
                         : ", no currentBuilding";
                     Mod.log.Info($"[Volunteer] Citizen {completion.Volunteer.Index}:{completion.Volunteer.Version} abandoned trip to park {completion.Park.Index}:{completion.Park.Version} (reason: {reasonText}{locationText})");
+
+                    // For stuck cims, clear their TravelPurpose and TripNeeded if they're still set to go to our park
+                    if (completion.Reason == AbandonReason.StuckInBuilding)
+                    {
+                        ClearStuckCimTravelState(completion.Volunteer, completion.Park);
+                    }
                     continue;
                 }
 
@@ -545,6 +565,38 @@ namespace ServiceCims.Systems
             });
 
             // Note: TravelPurpose removal is handled in ProcessCompletions before this is called
+        }
+
+        private void ClearStuckCimTravelState(Entity citizen, Entity targetPark)
+        {
+            if (citizen == Entity.Null || !EntityManager.Exists(citizen))
+                return;
+
+            // Remove TravelPurpose if it's GoingToWork (which is what we set for volunteer trips)
+            if (EntityManager.HasComponent<TravelPurpose>(citizen))
+            {
+                var travelPurpose = EntityManager.GetComponentData<TravelPurpose>(citizen);
+                if (travelPurpose.m_Purpose == Purpose.GoingToWork)
+                {
+                    EntityManager.RemoveComponent<TravelPurpose>(citizen);
+                    Mod.log.Info($"[Volunteer] Removed GoingToWork TravelPurpose from stuck citizen {citizen.Index}:{citizen.Version}");
+                }
+            }
+
+            // Remove any TripNeeded entries targeting our park
+            if (EntityManager.HasBuffer<TripNeeded>(citizen))
+            {
+                var tripBuffer = EntityManager.GetBuffer<TripNeeded>(citizen);
+                for (int i = tripBuffer.Length - 1; i >= 0; i--)
+                {
+                    var trip = tripBuffer[i];
+                    if (trip.m_TargetAgent == targetPark)
+                    {
+                        tripBuffer.RemoveAt(i);
+                        Mod.log.Info($"[Volunteer] Removed TripNeeded to park {targetPark.Index}:{targetPark.Version} from stuck citizen {citizen.Index}:{citizen.Version}");
+                    }
+                }
+            }
         }
     }
 }
