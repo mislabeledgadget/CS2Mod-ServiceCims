@@ -163,11 +163,11 @@ namespace ServiceCims.Systems
                     if (citizen.GetAge() == CitizenAge.Child)
                         continue;
 
-                    // Skip sleeping citizens
+                    // Skip sleeping citizens and those leaving hospital
                     if (hasTravelPurpose)
                     {
                         var purpose = travelPurposes[i].m_Purpose;
-                        if (purpose == Purpose.Sleeping)
+                        if (purpose == Purpose.Sleeping || purpose == Purpose.InHospital)
                             continue;
                     }
 
